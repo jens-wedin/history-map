@@ -7,7 +7,7 @@
   // ----- Config -----
   const CONFIG = {
     proximityMeters: 150,      // auto-open a story when this close
-    midMeters: 600,            // within this range = full pin; beyond it = small dot
+    midMeters: 250,            // within this range = full pin; beyond it = small dot
     searchRadiusMeters: 5000,  // how far around you to look for places (Wikipedia max 10000)
     maxResults: 80,            // cap markers per fetch
     refetchMeters: 1200,       // refetch places after moving this far
