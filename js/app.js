@@ -153,11 +153,95 @@
     return (json.parse && json.parse.text) || "";
   }
 
+  // ----- Place types -> icon -----
+  // Wikipedia GeoSearch only gives title + coords, so we classify each place
+  // from its short description (e.g. "Catholic church in Rome"). First match wins,
+  // so rules are ordered most-specific first.
+  const TYPE_RULES = [
+    [/cathedral|basilica|minster/, "⛪", "Cathedral"],
+    [/church|chapel|abbey|monaster|convent|priory|friary|parish/, "⛪", "Church"],
+    [/mosque/, "🕌", "Mosque"],
+    [/synagogue/, "🕍", "Synagogue"],
+    [/amphitheat|\bforum\b|ancient roman|roman temple|greek temple|ancient greek/, "🏛️", "Ancient site"],
+    [/temple|shrine/, "🛕", "Temple"],
+    [/archaeolog|\bruins?\b|excavation/, "🏺", "Ruins"],
+    [/palace|château|chateau|stately home/, "🏰", "Palace"],
+    [/castle|fortress|\bfort\b|citadel|city wall|bastion/, "🏰", "Castle"],
+    [/museum|gallery/, "🖼️", "Museum"],
+    [/theat(re|er)|opera|playhouse|concert hall|cinema/, "🎭", "Theatre"],
+    [/library/, "📚", "Library"],
+    [/universit|college|\bschool\b|academy|institute/, "🎓", "University"],
+    [/town hall|city hall|guildhall|hôtel de ville|courthouse|parliament|capitol/, "🏛️", "Civic building"],
+    [/monument|memorial|obelisk|statue|sculpture|\bcolumn\b|cenotaph/, "🗿", "Monument"],
+    [/fountain/, "⛲", "Fountain"],
+    [/bridge|viaduct|aqueduct/, "🌉", "Bridge"],
+    [/tower|lighthouse/, "🗼", "Tower"],
+    [/park|garden|arboretum|botanical/, "🌳", "Park"],
+    [/cemetery|graveyard|\btomb\b|mausoleum|necropolis|catacomb|burial/, "⚰️", "Cemetery"],
+    [/station|railway/, "🚉", "Station"],
+    [/stadium|arena/, "🏟️", "Stadium"],
+    [/market|bazaar/, "🛍️", "Market"],
+    [/hotel|\binn\b/, "🏨", "Hotel"],
+    [/hospital|infirmary|asylum/, "🏥", "Hospital"],
+    [/mountain|\bhill\b|\bmount\b|\bpeak\b|volcano/, "⛰️", "Natural feature"],
+    [/lake|\briver\b|canal|waterfall|reservoir|\bpond\b/, "💧", "Waterway"],
+    [/square|piazza|plaza|\bsteps\b/, "🏙️", "Square"],
+    [/house|villa|residence|mansion|cottage|birthplace|manor/, "🏠", "House"],
+  ];
+
+  function classifyType(title, description) {
+    const hay = `${title} ${description || ""}`.toLowerCase();
+    for (const [re, emoji, label] of TYPE_RULES) {
+      if (re.test(hay)) return { emoji, label };
+    }
+    return { emoji: "📖", label: "" };
+  }
+
+  // Batch-fetch short descriptions for a set of page ids (max 50 per request).
+  async function fetchDescriptions(pageids) {
+    const out = new Map();
+    for (let i = 0; i < pageids.length; i += 50) {
+      const chunk = pageids.slice(i, i + 50);
+      const params = new URLSearchParams({
+        action: "query",
+        prop: "description",
+        pageids: chunk.join("|"),
+        format: "json",
+        formatversion: "2",
+        origin: "*",
+      });
+      try {
+        const res = await fetch(`${wikiApi(CONFIG.wikiLang)}?${params}`);
+        if (!res.ok) continue;
+        const json = await res.json();
+        ((json.query && json.query.pages) || []).forEach((p) => out.set(p.pageid, p.description || ""));
+      } catch (e) {
+        /* keep default icons on failure */
+      }
+    }
+    return out;
+  }
+
+  // Classify markers by type and swap in the matching icon.
+  async function enrichTypes(places) {
+    const ids = places.map((p) => p.pageid).filter((id) => state.markers.has(id));
+    if (!ids.length) return;
+    const descs = await fetchDescriptions(ids);
+    descs.forEach((desc, pageid) => {
+      const entry = state.markers.get(pageid);
+      if (!entry) return;
+      const t = classifyType(entry.data.title, desc);
+      entry.data.emoji = t.emoji;
+      entry.data.typeLabel = t.label;
+      entry.marker.setIcon(makeIcon(entry.near, t.emoji));
+    });
+  }
+
   // ----- Markers -----
-  function makeIcon(near) {
+  function makeIcon(near, emoji) {
     return L.divIcon({
       className: "",
-      html: `<div class="hm-marker${near ? " near" : ""}"><span>📖</span></div>`,
+      html: `<div class="hm-marker${near ? " near" : ""}"><span>${emoji || "📖"}</span></div>`,
       iconSize: [30, 30],
       iconAnchor: [15, 30],
       popupAnchor: [0, -28],
@@ -166,8 +250,8 @@
 
   function addMarker(place) {
     if (state.markers.has(place.pageid)) return;
-    const data = { pageid: place.pageid, title: place.title, lat: place.lat, lng: place.lon };
-    const marker = L.marker([place.lat, place.lon], { icon: makeIcon(false) }).addTo(state.map);
+    const data = { pageid: place.pageid, title: place.title, lat: place.lat, lng: place.lon, emoji: "📖", typeLabel: "" };
+    const marker = L.marker([place.lat, place.lon], { icon: makeIcon(false, data.emoji) }).addTo(state.map);
     marker.on("click", () => openPanel(place.pageid));
     state.markers.set(place.pageid, { marker, data, announced: false, near: false });
   }
@@ -177,6 +261,7 @@
       status("Looking for history nearby…", true);
       const places = await fetchNearbyPlaces(pos);
       places.forEach(addMarker);
+      enrichTypes(places); // classify icons in the background; markers show immediately
       state.lastFetchPos = pos;
       if (state.markers.size === 0) {
         status("No mapped history within " + CONFIG.searchRadiusMeters / 1000 + " km here.");
@@ -198,7 +283,7 @@
       const isNear = d <= CONFIG.proximityMeters;
       if (isNear !== entry.near) {
         entry.near = isNear;
-        entry.marker.setIcon(makeIcon(isNear));
+        entry.marker.setIcon(makeIcon(isNear, entry.data.emoji));
       }
       if (isNear && d < nearestDist) {
         nearestDist = d;
@@ -227,7 +312,10 @@
     el.panelImageWrap.innerHTML = '<div class="spinner"></div>';
 
     const dist = knownDist != null ? knownDist : (state.userMarker ? distanceMeters(getUserPos(), data) : null);
-    el.panelDistance.textContent = dist != null ? formatDistance(dist) : "";
+    const distParts = [];
+    if (data.typeLabel) distParts.push(`${data.emoji} ${data.typeLabel}`);
+    if (dist != null) distParts.push(formatDistance(dist));
+    el.panelDistance.textContent = distParts.join(" · ");
 
     const wikiUrl = `https://${CONFIG.wikiLang}.wikipedia.org/?curid=${pageid}`;
     el.panelWiki.href = wikiUrl;
