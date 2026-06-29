@@ -9,7 +9,9 @@
   --ring: rgba(242, 166, 90, 0.5);
   --shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
   --radius: 18px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Times New Roman", serif;
+  font-family: var(--sans);
 }
 
 * { box-sizing: border-box; }
@@ -208,9 +210,9 @@ html, body {
   font-size: 46px; opacity: 0.5;
 }
 .panel-body { padding: 18px 20px 28px; }
-.panel-title { margin: 0 0 4px; font-size: 22px; line-height: 1.2; }
+.panel-title { margin: 0 0 4px; font-family: var(--serif); font-size: 24px; line-height: 1.2; }
 .panel-distance { margin: 0 0 14px; color: var(--accent); font-size: 13px; font-weight: 600; }
-.panel-extract { margin: 0 0 20px; color: #d7deec; line-height: 1.55; font-size: 15px; }
+.panel-extract { margin: 0 0 20px; font-family: var(--serif); color: #d7deec; line-height: 1.65; font-size: 16px; }
 .panel-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 
 /* ---------- Buttons ---------- */
@@ -256,17 +258,19 @@ html, body {
   width: auto; height: 38px; border-radius: 10px; padding: 0 12px; font-size: 14px;
   box-shadow: none; background: rgba(255,255,255,0.08);
 }
-.fullview-title { flex: 1; font-weight: 700; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fullview-title { flex: 1; font-family: var(--serif); font-weight: 700; font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fullview-content {
   padding: 22px 20px 60px;
   overflow-y: auto;
-  max-width: 760px;
+  max-width: 720px;
   margin: 0 auto;
   width: 100%;
-  line-height: 1.65;
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.7;
 }
 .fullview-content img { max-width: 100%; height: auto; border-radius: 12px; margin: 12px 0; }
-.fullview-content h1, .fullview-content h2, .fullview-content h3 { line-height: 1.25; }
+.fullview-content h1, .fullview-content h2, .fullview-content h3 { font-family: var(--serif); line-height: 1.25; }
 .fullview-content p { color: #d7deec; }
 .fullview-content a { color: var(--accent); }
 
