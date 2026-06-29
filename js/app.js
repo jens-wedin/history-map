@@ -7,6 +7,7 @@
   // ----- Config -----
   const CONFIG = {
     proximityMeters: 150,      // auto-open a story when this close
+    midMeters: 600,            // within this range = full pin; beyond it = small dot
     searchRadiusMeters: 5000,  // how far around you to look for places (Wikipedia max 10000)
     maxResults: 80,            // cap markers per fetch
     refetchMeters: 1200,       // refetch places after moving this far
@@ -259,15 +260,34 @@
       const t = classifyType(entry.data.title, desc);
       entry.data.emoji = t.emoji;
       entry.data.typeLabel = t.label;
-      entry.marker.setIcon(makeIcon(entry.near, t.emoji));
+      entry.marker.setIcon(makeIcon(t.emoji, entry.tier));
     });
   }
 
   // ----- Markers -----
-  function makeIcon(near, emoji) {
+  // Size depends on how far the place is from the user:
+  //   near (very close) -> pulsing pin · mid -> full pin · far -> small dot.
+  function tierForDistance(d) {
+    if (d == null) return "mid";
+    if (d <= CONFIG.proximityMeters) return "near";
+    if (d <= CONFIG.midMeters) return "mid";
+    return "far";
+  }
+
+  function makeIcon(emoji, tier) {
+    if (tier === "far") {
+      // A small dot, but the 24px transparent box keeps a comfortable tap target.
+      return L.divIcon({
+        className: "",
+        html: '<div class="hm-dot"><span class="hm-dot-core"></span></div>',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+        popupAnchor: [0, -10],
+      });
+    }
     return L.divIcon({
       className: "",
-      html: `<div class="hm-marker${near ? " near" : ""}"><span>${emoji || "📖"}</span></div>`,
+      html: `<div class="hm-marker${tier === "near" ? " near" : ""}"><span>${emoji || "📖"}</span></div>`,
       iconSize: [30, 30],
       iconAnchor: [15, 30],
       popupAnchor: [0, -28],
@@ -277,9 +297,9 @@
   function addMarker(place) {
     if (state.markers.has(place.pageid)) return;
     const data = { pageid: place.pageid, title: place.title, lat: place.lat, lng: place.lon, emoji: "📖", typeLabel: "" };
-    const marker = L.marker([place.lat, place.lon], { icon: makeIcon(false, data.emoji) }).addTo(state.map);
+    const marker = L.marker([place.lat, place.lon], { icon: makeIcon(data.emoji, "mid") }).addTo(state.map);
     marker.on("click", () => openPanel(place.pageid));
-    state.markers.set(place.pageid, { marker, data, announced: false, near: false });
+    state.markers.set(place.pageid, { marker, data, announced: false, tier: "mid" });
   }
 
   async function loadPlaces(pos) {
@@ -288,6 +308,7 @@
       const places = await fetchNearbyPlaces(pos);
       places.forEach(addMarker);
       enrichTypes(places); // classify icons in the background; markers show immediately
+      checkProximity(pos); // size new markers (dot vs pin) right away
       state.lastFetchPos = pos;
       if (state.markers.size === 0) {
         status("No mapped history within " + CONFIG.searchRadiusMeters / 1000 + " km here.");
@@ -306,12 +327,12 @@
     let nearestDist = Infinity;
     state.markers.forEach((entry) => {
       const d = distanceMeters(pos, entry.data);
-      const isNear = d <= CONFIG.proximityMeters;
-      if (isNear !== entry.near) {
-        entry.near = isNear;
-        entry.marker.setIcon(makeIcon(isNear, entry.data.emoji));
+      const tier = tierForDistance(d);
+      if (tier !== entry.tier) {
+        entry.tier = tier;
+        entry.marker.setIcon(makeIcon(entry.data.emoji, tier));
       }
-      if (isNear && d < nearestDist) {
+      if (tier === "near" && d < nearestDist) {
         nearestDist = d;
         nearest = entry;
       }
