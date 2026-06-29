@@ -78,6 +78,26 @@
   }
 
   // ----- Map setup -----
+  const TILE_ATTR =
+    '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a> · History via <a href="https://wikipedia.org">Wikipedia</a>';
+
+  function prefersLight() {
+    return !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches);
+  }
+
+  function tileUrl(light) {
+    const style = light ? "light_all" : "dark_all";
+    return `https://{s}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}{r}.png`;
+  }
+
+  // Keep map tiles and the browser chrome colour in sync with the OS theme.
+  function applyTheme() {
+    const light = prefersLight();
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", light ? "#f6f4ef" : "#1b2a4a");
+    if (state.tileLayer) state.tileLayer.setUrl(tileUrl(light));
+  }
+
   function initMap(center) {
     state.map = L.map("map", { zoomControl: false, attributionControl: true }).setView(
       [center.lat, center.lng],
@@ -85,12 +105,18 @@
     );
     L.control.zoom({ position: "bottomright" }).addTo(state.map);
 
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-      attribution:
-        '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a> · History via <a href="https://wikipedia.org">Wikipedia</a>',
+    state.tileLayer = L.tileLayer(tileUrl(prefersLight()), {
+      attribution: TILE_ATTR,
       subdomains: "abcd",
       maxZoom: 20,
     }).addTo(state.map);
+
+    applyTheme();
+  }
+
+  // React to the user flipping their OS between light and dark.
+  if (window.matchMedia) {
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
   }
 
   function setUserPosition(pos) {
